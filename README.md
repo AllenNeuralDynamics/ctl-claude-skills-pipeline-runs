@@ -3,8 +3,24 @@
 Claude Code skills for running CTL / multiplane-ophys Code Ocean pipelines manually.
 
 Each subdirectory is a self-contained skill (a `SKILL.md` plus supporting `scripts/`).
-To use with Claude Code, point a skills source at this repo (or copy a skill dir into a
-capsule's `.claude/skills/`).
+
+## Deploy (symlink from the clone into `.claude/skills`)
+
+Clone this repo once, then **symlink each skill directory** into the capsule's
+`.claude/skills/` — the same way the `codeocean-*` skills are linked
+(`.claude/skills/<skill> -> /<clone>/<skill>`). Symlinking (rather than copying) means a
+`git pull` updates the live skills in place.
+
+```bash
+# one-time: clone (example location used here)
+git clone <remote-url> /ctl-claude-skills-pipeline-runs
+
+# link each skill dir into the capsule
+ln -s /ctl-claude-skills-pipeline-runs/roicat-manual-run \
+      /root/capsule/.claude/skills/roicat-manual-run
+```
+
+Add one `ln -s` per skill as new ones are added to this repo.
 
 ## Skills
 
