@@ -20,9 +20,8 @@ launching the ROICaT matching capsule — no orchestrator/monitor needed. It mir
   (slug 5918543, `status: non_release`). Run with **no version and no named parameters** — it
   discovers the processed assets from `/data` by their mount-dir name and uses default
   RoMa/DeepFlow/all-to-all algorithm settings.
-- Fallback (equivalent, released): `2bd8a7e5-7f98-461c-a921-b88b2a79492b` v5 (the capsule
-  `0f51d117` was cloned from). The **monitor** `d6c4c877` is broken (`named_run_parameters`
-  lib drift) — don't use it.
+- If a run fails, **report the failure** — do not fall back to another capsule.
+  (The monitor `d6c4c877` is broken — `named_run_parameters` lib drift — don't use it.)
 
 ## How the table drives a run
 Each subject's session set = every row for that `subject_id` that has a processed asset, i.e.
@@ -40,6 +39,9 @@ the tool at whichever table version is authoritative (e.g. an updated table that
 ```bash
 S=/ctl-claude-skills-pipeline-runs/roicat-manual-run/scripts/run_roicat.py
 TABLE=/path/to/ground_truth_session_table.csv
+
+# find EXISTING ROICaT assets in Code Ocean (general; optionally filter by subject)
+python $S find   --subjects 800792 800995 804363
 
 # preview the per-subject asset lists (no run)
 python $S list   --table $TABLE --subjects 800792 800995 804363
@@ -62,12 +64,15 @@ python $S capture --runs roicat_runs.json --captured roicat_captured.json   # ts
 client-side from the computation (`Source(computation=ComputationSource(id=cid))`).
 
 ### Replacing previous ROICaT assets on a capsule
-To make a capsule use the new results, attach the new ROICaT assets and detach the old ones
+Find the existing per-mouse ROICaT assets in **Code Ocean** (`find` subcommand — general, not
+capsule-specific), then attach the new ones and detach the old ones
 (`co.capsules.attach_data_assets` / `detach_data_assets`, or the `codeocean-data-assets` skill).
 
 ## Gotchas
-- **Success = `exit_code == 0`.** (For a plain capsule, `state=completed` + exit 0/None.)
-- **ROICaT assets are NOT in the CO search index** — downstream code finds them in `/data`
-  (`ls /data/*ROICat*`), not via `search_data_assets`.
+- **Success = `exit_code == 0`.** (For a plain capsule, `state=completed` + exit 0/None.) If a
+  run fails, report it — there is no fallback capsule.
+- **Find existing ROICaT assets via Code Ocean search** (`find` / `tag:ROICat`), NOT by listing
+  `/data`: `/data` only shows what's mounted on the current capsule, whereas the CO search is
+  general across capsules and finds every ROICaT asset (including newer runs not mounted here).
 - ROICaT `ucid` is **per-plane**; a tracked cell is `(fov_name, ucid)`, not `ucid` alone.
 - Result layout: `<asset>/<0..7 = VISp_0..7>/ROICaT.tracking.results.csv`.

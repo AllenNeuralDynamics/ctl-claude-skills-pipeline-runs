@@ -26,7 +26,7 @@ import os, sys, csv, json, time, argparse, datetime
 
 DEFAULT_DOMAIN = "https://codeocean.allenneuraldynamics.org"
 # "Jinho's Copy of ROICaT Cross-session Matching" (slug 5918543). Runs with no version/named params.
-# (Released original `2bd8a7e5-7f98-461c-a921-b88b2a79492b` v5 is an equivalent fallback.)
+# If a run fails, report the failure — do NOT fall back to another capsule.
 DEFAULT_CAPSULE = "0f51d117-39dc-4c27-a62a-965b4216a32e"
 TOKEN_ENV = ("CODEOCEAN_TOKEN", "API_SECRET", "CO_TOKEN", "CUSTOM_KEY")
 
@@ -73,6 +73,25 @@ def cmd_list(args):
             print(f"    {pid}  {pn}")
 
 
+def cmd_find(args):
+    """Find EXISTING ROICaT data assets in Code Ocean (NOT by listing /data — that only shows
+    what's mounted on the current capsule). Searches by the `ROICat` tag, so it is general
+    across capsules/deployments; optionally filter to given subject ids (client-side)."""
+    from codeocean.data_asset import DataAssetSearchParams
+    client = get_client(args)
+    res = client.data_assets.search_data_assets(
+        DataAssetSearchParams(query="tag:ROICat", limit=args.limit, archived=False))
+    rows = [a for a in getattr(res, "results", []) if "_ROICat_" in a.name]
+    if args.subjects:
+        rows = [a for a in rows if any(f"_{s}_" in a.name for s in args.subjects)]
+    for a in sorted(rows, key=lambda a: getattr(a, "created", 0), reverse=True):
+        cr = getattr(a, "created", 0)
+        ds = datetime.datetime.utcfromtimestamp(cr).strftime("%Y-%m-%d") if cr else "?"
+        print(f"{a.id}  {a.name}  created={ds}  state={getattr(a,'state','?')}")
+    if getattr(res, "has_more", False):
+        print(f"(more than {args.limit} results — raise --limit)")
+
+
 def cmd_launch(args):
     from codeocean.computation import RunParams, DataAssetsRunParam
     client = get_client(args)
@@ -82,7 +101,11 @@ def cmd_launch(args):
         if not a:
             print(f"{s}: no processed assets in table — skipping"); continue
         da = [DataAssetsRunParam(id=pid, mount=pn) for pid, pn in a]
-        comp = client.computations.run_capsule(RunParams(capsule_id=args.capsule, data_assets=da))
+        try:
+            comp = client.computations.run_capsule(RunParams(capsule_id=args.capsule, data_assets=da))
+        except Exception as e:
+            print(f"{s}: FAILED to submit ({len(da)} assets) — {e}", flush=True)
+            continue
         runs[s] = comp.id
         print(f"{s}: submitted {len(da)} assets -> {comp.id} ({comp.state})", flush=True)
     json.dump({"capsule": args.capsule, "runs": runs}, open(args.runs, "w"), indent=1)
@@ -159,6 +182,10 @@ def build_parser():
         p.add_argument("--subjects", nargs="+", required=True, help="subject ids")
         p.add_argument("--capsule", default=DEFAULT_CAPSULE)
 
+    fi = sub.add_parser("find"); common(fi)
+    fi.add_argument("--subjects", nargs="*", default=None, help="optional subject-id filter")
+    fi.add_argument("--limit", type=int, default=200)
+    fi.set_defaults(func=cmd_find)
     l = sub.add_parser("list");    common(l); tbl(l); l.set_defaults(func=cmd_list)
     la = sub.add_parser("launch"); common(la); tbl(la); la.set_defaults(func=cmd_launch)
     st = sub.add_parser("status"); common(st); st.set_defaults(func=cmd_status)
