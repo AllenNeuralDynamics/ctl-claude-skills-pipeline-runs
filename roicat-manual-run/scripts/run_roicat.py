@@ -145,6 +145,15 @@ def cmd_capture(args):
             source=Source(computation=ComputationSource(id=cid))))
         out[s] = {"asset_id": a.id, "name": name}
         print(f"{s}: captured -> {name}  id={a.id}", flush=True)
+        # Share with everyone by default (matches the Code Ocean UI capture default; owner kept).
+        if not getattr(args, "private", False):
+            from codeocean.components import Permissions, EveryoneRole
+            try:
+                client.data_assets.update_permissions(
+                    a.id, Permissions(everyone=EveryoneRole(getattr(args, "share_role", "viewer"))))
+                print(f"{s}: shared (everyone={getattr(args,'share_role','viewer')})", flush=True)
+            except Exception as e:
+                print(f"{s}: WARNING could not share: {e}", flush=True)
     json.dump(out, open(args.captured, "w"), indent=1)
     print("saved", args.captured)
 
@@ -189,10 +198,16 @@ def build_parser():
     l = sub.add_parser("list");    common(l); tbl(l); l.set_defaults(func=cmd_list)
     la = sub.add_parser("launch"); common(la); tbl(la); la.set_defaults(func=cmd_launch)
     st = sub.add_parser("status"); common(st); st.set_defaults(func=cmd_status)
-    ca = sub.add_parser("capture"); common(ca); ca.add_argument("--ts", default=None); ca.set_defaults(func=cmd_capture)
+    def share_opts(p):
+        p.add_argument("--private", action="store_true",
+                       help="do NOT share captured assets (default: share with everyone as viewer, "
+                            "matching the Code Ocean UI capture default)")
+        p.add_argument("--share-role", default="viewer", choices=["viewer", "discoverable", "none"],
+                       help="everyone-access level for captured assets (default: viewer)")
+    ca = sub.add_parser("capture"); common(ca); ca.add_argument("--ts", default=None); share_opts(ca); ca.set_defaults(func=cmd_capture)
     mo = sub.add_parser("monitor"); common(mo); mo.add_argument("--ts", default=None)
     mo.add_argument("--interval", type=int, default=120); mo.add_argument("--maxwait", type=int, default=18000)
-    mo.set_defaults(func=cmd_monitor)
+    share_opts(mo); mo.set_defaults(func=cmd_monitor)
     return ap
 
 

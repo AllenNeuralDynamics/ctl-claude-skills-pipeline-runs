@@ -62,6 +62,10 @@ python $S capture --runs roicat_runs.json --captured roicat_captured.json   # ts
 `derived, multiplane-ophys, ROICat, <subject>`, custom metadata
 `data level=derived, experiment type=multiplane-ophys, subject id=<subject>`. Capture is
 client-side from the computation (`Source(computation=ComputationSource(id=cid))`).
+Captured assets are **shared with everyone (`viewer`) by default** — matching the Code Ocean
+UI capture default; the owner is kept (`update_permissions(id, Permissions(everyone=Viewer))`,
+verify via `GET data_assets/{id}/permissions`). Pass `--private` to keep private, or
+`--share-role discoverable/none`.
 
 ### Replacing previous ROICaT assets on a capsule
 Find the existing per-mouse ROICaT assets in **Code Ocean** (`find` subcommand — general, not
