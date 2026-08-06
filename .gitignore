@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+# runtime state written by scripts (not part of the skill)
+roicat_runs.json
+roicat_captured.json
