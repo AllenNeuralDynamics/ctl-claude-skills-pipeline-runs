@@ -109,6 +109,31 @@ Pass the values as fallback parameters:
 
 Use `--named-param`, not `--param` (flat params are silently ignored by this capsule's argparse).
 
+**Always use `--client-name` with `--input-name` and `--process-name-suffix` for Step 2.**
+S3-workaround session names have `_<descriptor>` where standard AIND sessions have `_HH-MM-SS`,
+so the CO monitor's DERIVED regex never matches and it falls back to a wrong name. `--client-name`
+sets `capture_settings.name` explicitly at submit time (bypassing the regex), producing the
+correct `..._cortical-zstack-segmentation_<ts>` name with no post-capture rename needed.
+
+```bash
+SKILL_DIR=/root/capsule/.claude/skills/codeocean-run-capture
+SESSION="multiplane-ophys_<subject_id>_<yyyy-mm-dd>_<descriptor>"   # strip _cortical-zstack-registration_<ts>
+python "$SKILL_DIR/scripts/co_run_capture.py" run --monitor \
+  --capsule-id 0a174d03-4330-4f76-a76c-c56cca4293f0 \
+  --data-asset-name "<CZ_REG_ASSET_NAME>" \
+  --client-name \
+  --input-name "$SESSION" \
+  --process-name-suffix cortical-zstack-segmentation \
+  --named-param channel=<0_OR_-1> \
+  --named-param xy_resolution_fallback=<xy_um> \
+  --named-param z_resolution_fallback=<z_um> \
+  --tag derived --tag cortical-zstack-segmentation --tag <subject_id>
+```
+
+`SESSION` is the part of the registration asset name before `_cortical-zstack-registration_<ts>`.
+For `multiplane-ophys_833855_2026-05-22_RG-700x700-450um_cortical-zstack-registration_...`,
+`SESSION = "multiplane-ophys_833855_2026-05-22_RG-700x700-450um"`.
+
 ---
 
 ## Examples
@@ -118,20 +143,56 @@ Use `--named-param`, not `--param` (flat params are silently ignored by this cap
 ```
 Step 1: subject_id=839909, czstack_filename=20260507_839909_700x700_Green_VISp_cortical_00001.tif
         tags: multiplane-ophys, 839909, cortical-zstack-registration
-Step 2: data-asset-name=multiplane-ophys_839909_2026-05-07_700x700-Green-VISp_cortical-zstack-registration_<ts>
+Step 2: --data-asset-name multiplane-ophys_839909_2026-05-07_700x700-Green-VISp_cortical-zstack-registration_<ts>
+        --client-name --input-name multiplane-ophys_839909_2026-05-07_700x700-Green-VISp
+        --process-name-suffix cortical-zstack-segmentation
         tags: multiplane-ophys, 839909, cortical-zstack-segmentation
 ```
 
-### 833855 — 2-channel RG
+### 833855 — 2-channel RG 512x512
 
 ```
 Step 1: subject_id=833855, czstack_filename=260522_833855_RG_512x512_450um_00001.tif
-        tags: multiplane-ophys, 833855, cortical-zstack-registration
-Step 2: data-asset-name=multiplane-ophys_833855_2026-05-22_RG-512x512-450um_cortical-zstack-registration_<ts>
-        tags: multiplane-ophys, 833855, cortical-zstack-segmentation
+        → multiplane-ophys_833855_2026-05-22_RG-512x512-450um_cortical-zstack-registration_<ts>
+Step 2: --data-asset-name multiplane-ophys_833855_2026-05-22_RG-512x512-450um_cortical-zstack-registration_<ts>
+        --client-name --input-name multiplane-ophys_833855_2026-05-22_RG-512x512-450um
+        --process-name-suffix cortical-zstack-segmentation
+```
+
+### 833855 — 2-channel RG 700x700 (multi-volume, pre-averaging fix)
+
+```
+Step 1: subject_id=833855, czstack_filename=260522_833855_RG_700x700_450um_00001.tif
+        (450 slices × 100 volumes × 2 ch; volumes averaged before loading)
+        → multiplane-ophys_833855_2026-05-22_RG-700x700-450um_cortical-zstack-registration_<ts>
+        xy=0.78 µm/px  z=1.0 µm/plane
+Step 2: --data-asset-name multiplane-ophys_833855_2026-05-22_RG-700x700-450um_cortical-zstack-registration_<ts>
+        --client-name --input-name multiplane-ophys_833855_2026-05-22_RG-700x700-450um
+        --process-name-suffix cortical-zstack-segmentation
+        xy_resolution_fallback=0.78  z_resolution_fallback=1.0
 ```
 
 ---
 
 ## Notes
 - CO search index lags — a just-captured asset may not appear in search for several minutes.
+  Use `find-asset --name "<subject_id> cortical-zstack-registration"` rather than
+  `find-asset --name "multiplane-ophys_<subject_id>"` (the latter returns only 20 results).
+- **Do NOT pass `--process-name-suffix` for Step 1.** The registration capsule writes its own
+  `data_description.json`. If you pass `--process-name-suffix`, the monitor appends the suffix
+  to the already-named output → double suffix in the asset name (e.g.
+  `..._cortical-zstack-registration_<ts>_cortical-zstack-registration_<ts2>`).
+  Omit it entirely — the monitor will use `data_description.json` directly.
+- Multi-volume TIFFs (e.g. 450 slices × 100 volumes × 2 ch = 90 000 pages) are handled by
+  pre-averaging volumes before loading so the registration never OOMs. This is transparent —
+  `n_repeats_per_plane` is set to 1 after averaging.
+- **S3-workaround session names have `_<descriptor>` where standard AIND sessions have `_HH-MM-SS`**
+  (e.g. `RG-700x700-450um` vs `14-12-57`). The CO monitor validates `data_description.json`
+  against `DataRegex.DERIVED`, which requires the input portion to end with
+  `_YYYY-MM-DD_HH-MM-SS`. S3-workaround names never match, so the monitor falls back to
+  `<full_input_name>_processed_<ts>` — the wrong name. Workaround: use `--client-name` with
+  `--input-name` and `--process-name-suffix` (see Step 2 above). This sets
+  `capture_settings.name` explicitly at submit time (bypassing the regex entirely).
+  Step 1 (registration) is unaffected — the registration capsule explicitly embeds a datetime
+  into `capture_name` before calling `process_json_files`, producing a DERIVED-matching name
+  that the monitor uses directly.
