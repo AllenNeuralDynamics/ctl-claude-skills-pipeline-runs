@@ -27,6 +27,7 @@ Add one `ln -s` per skill as new ones are added to this repo.
 | skill | what it does |
 |---|---|
 | [`roicat-manual-run`](roicat-manual-run/) | Rerun ROICaT cross-session cell-matching per subject by attaching a subject's processed ophys assets (from a ground-truth session table) and launching the ROICaT capsule, then capturing per-mouse ROICaT data assets. |
+| [`ophys-xenium-autocoreg`](ophys-xenium-autocoreg/) | Run the ophys<->Xenium automatic coregistration capsule per subject: discovers and ranks candidate Xenium-ophys-coregistered/ophys-z-stacks assets by ROI count, flags ambiguous/wrong-FOV/archived/duplicate candidates and layouts needing the registered/segmented pin override, then launches with the correct result-naming convention. |
 
 ## Conventions
 - Scripts depend only on the `codeocean` python client and read the API token from
